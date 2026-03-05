@@ -600,13 +600,6 @@ export async function main() {
       await config.getHookSystem()?.fireSessionEndEvent(SessionEndReason.Exit);
     });
 
-    // Cleanup sessions after config initialization
-    try {
-      await cleanupExpiredSessions(config, settings.merged);
-    } catch (e) {
-      debugLogger.error('Failed to cleanup expired sessions:', e);
-    }
-
     if (config.getListExtensions()) {
       debugLogger.log('Installed extensions:');
       for (const extension of config.getExtensions()) {
@@ -713,6 +706,13 @@ export async function main() {
         await runExitCleanup();
         process.exit(ExitCodes.FATAL_INPUT_ERROR);
       }
+    }
+
+    // Cleanup sessions after config initialization and session resumption
+    try {
+      await cleanupExpiredSessions(config, settings.merged);
+    } catch (e) {
+      debugLogger.error('Failed to cleanup expired sessions:', e);
     }
 
     cliStartupHandle?.end();

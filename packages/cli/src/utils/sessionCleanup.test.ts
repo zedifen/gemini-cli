@@ -121,6 +121,7 @@ describe('Session Cleanup', () => {
       sessions.map((session) => ({
         fileName: session.fileName,
         sessionInfo: session,
+        mtimeMs: 0,
       })),
     );
   });
@@ -498,6 +499,7 @@ describe('Session Cleanup', () => {
         testSessions.map((session) => ({
           fileName: session.fileName,
           sessionInfo: session,
+          mtimeMs: 0,
         })),
       );
 
@@ -620,6 +622,7 @@ describe('Session Cleanup', () => {
         testSessions.map((session) => ({
           fileName: session.fileName,
           sessionInfo: session,
+          mtimeMs: 0,
         })),
       );
 
@@ -697,6 +700,7 @@ describe('Session Cleanup', () => {
         sessions.map((session) => ({
           fileName: session.fileName,
           sessionInfo: session,
+          mtimeMs: 0,
         })),
       );
 
@@ -854,6 +858,7 @@ describe('Session Cleanup', () => {
         testSessions.map((session) => ({
           fileName: session.fileName,
           sessionInfo: session,
+          mtimeMs: 0,
         })),
       );
 
@@ -1645,14 +1650,20 @@ describe('Session Cleanup', () => {
       // Mock getAllSessionFiles to return both valid and corrupted files
       const validSession = createTestSessions()[0];
       mockGetAllSessionFiles.mockResolvedValue([
-        { fileName: validSession.fileName, sessionInfo: validSession },
+        {
+          fileName: validSession.fileName,
+          sessionInfo: validSession,
+          mtimeMs: 0,
+        },
         {
           fileName: `${SESSION_FILE_PREFIX}2025-01-02T10-00-00-corrupt1.json`,
           sessionInfo: null,
+          mtimeMs: 0,
         },
         {
           fileName: `${SESSION_FILE_PREFIX}2025-01-03T10-00-00-corrupt2.json`,
           sessionInfo: null,
+          mtimeMs: 0,
         },
       ]);
 
@@ -1694,6 +1705,51 @@ describe('Session Cleanup', () => {
       expect(result).toBeDefined();
       expect(result.disabled).toBe(false);
       expect(result.failed).toBe(1);
+    });
+
+    it('should NOT delete corrupted sessions within the 1-hour grace period', async () => {
+      const config = createMockConfig();
+      const settings: Settings = {
+        general: {
+          sessionRetention: {
+            enabled: true,
+            maxAge: '30d',
+          },
+        },
+      };
+
+      const now = Date.now();
+      // One is 30 mins old (within grace period), one is 2 hours old (outside grace period)
+      const withinGrace = now - 30 * 60 * 1000;
+      const outsideGrace = now - 120 * 60 * 1000;
+
+      mockGetAllSessionFiles.mockResolvedValue([
+        {
+          fileName: `${SESSION_FILE_PREFIX}within.json`,
+          sessionInfo: null,
+          mtimeMs: withinGrace,
+        },
+        {
+          fileName: `${SESSION_FILE_PREFIX}outside.json`,
+          sessionInfo: null,
+          mtimeMs: outsideGrace,
+        },
+      ]);
+
+      mockFs.unlink.mockResolvedValue(undefined);
+
+      const result = await cleanupExpiredSessions(config, settings);
+
+      expect(result.scanned).toBe(2);
+      expect(result.deleted).toBe(1); // Only the outsideGrace one
+      expect(result.skipped).toBe(1); // The withinGrace one
+
+      expect(mockFs.unlink).toHaveBeenCalledWith(
+        expect.stringContaining('outside.json'),
+      );
+      expect(mockFs.unlink).not.toHaveBeenCalledWith(
+        expect.stringContaining('within.json'),
+      );
     });
   });
 });

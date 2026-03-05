@@ -26,6 +26,9 @@ const MULTIPLIERS = {
   m: 30 * 24 * 60 * 60 * 1000, // months (30 days) to ms
 };
 
+/** Grace period for corrupted or empty sessions before they are eligible for automatic cleanup. */
+const CORRUPTED_SESSION_GRACE_PERIOD_MS = 60 * 60 * 1000; // 1 hour
+
 /**
  * Result of session cleanup operation
  */
@@ -194,9 +197,15 @@ export async function identifySessionsToDelete(
 ): Promise<SessionFileEntry[]> {
   const sessionsToDelete: SessionFileEntry[] = [];
 
-  // All corrupted files should be deleted
+  // Corrupted or empty files should be deleted only after a grace period.
+  const now = new Date();
+  const corruptedGraceCutoff = now.getTime() - CORRUPTED_SESSION_GRACE_PERIOD_MS;
+
   sessionsToDelete.push(
-    ...allFiles.filter((entry) => entry.sessionInfo === null),
+    ...allFiles.filter(
+      (entry) =>
+        entry.sessionInfo === null && entry.mtimeMs < corruptedGraceCutoff,
+    ),
   );
 
   // Now handle valid sessions based on retention policy

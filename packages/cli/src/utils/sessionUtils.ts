@@ -123,6 +123,8 @@ export interface SessionFileEntry {
   fileName: string;
   /** Parsed session info if valid, null if corrupted */
   sessionInfo: SessionInfo | null;
+  /** File modification time in milliseconds */
+  mtimeMs: number;
 }
 
 /**
@@ -252,6 +254,9 @@ export const getAllSessionFiles = async (
     const sessionPromises = sessionFiles.map(
       async (file): Promise<SessionFileEntry> => {
         const filePath = path.join(chatsDir, file);
+        const stats = await fs.stat(filePath);
+        const mtimeMs = stats.mtimeMs;
+
         try {
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           const content: ConversationRecord = JSON.parse(
@@ -267,18 +272,18 @@ export const getAllSessionFiles = async (
             !content.lastUpdated
           ) {
             // Missing required fields - treat as corrupted
-            return { fileName: file, sessionInfo: null };
+            return { fileName: file, sessionInfo: null, mtimeMs };
           }
 
           // Skip sessions that only contain system messages (info, error, warning)
           if (!hasUserOrAssistantMessage(content.messages)) {
-            return { fileName: file, sessionInfo: null };
+            return { fileName: file, sessionInfo: null, mtimeMs };
           }
 
           // Skip subagent sessions - these are implementation details of a tool call
           // and shouldn't be surfaced for resumption in the main agent history.
           if (content.kind === 'subagent') {
-            return { fileName: file, sessionInfo: null };
+            return { fileName: file, sessionInfo: null, mtimeMs };
           }
 
           const firstUserMessage = extractFirstUserMessage(content.messages);
@@ -322,10 +327,10 @@ export const getAllSessionFiles = async (
             messages,
           };
 
-          return { fileName: file, sessionInfo };
+          return { fileName: file, sessionInfo, mtimeMs };
         } catch {
           // File is corrupted (can't read or parse JSON)
-          return { fileName: file, sessionInfo: null };
+          return { fileName: file, sessionInfo: null, mtimeMs };
         }
       },
     );

@@ -450,6 +450,41 @@ describe('SessionSelector', () => {
     expect(sessions[0].id).toBe(sessionIdGeminiOnly);
   });
 
+  describe('getAllSessionFiles', () => {
+    it('should return mtimeMs for each session file', async () => {
+      const { getAllSessionFiles } = await import('./sessionUtils.js');
+      const sessionId = randomUUID();
+      const chatsDir = path.join(tmpDir, 'chats');
+      await fs.mkdir(chatsDir, { recursive: true });
+
+      const session = {
+        sessionId,
+        projectHash: 'test-hash',
+        startTime: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
+        messages: [
+          {
+            type: 'user',
+            content: 'Hello',
+            id: 'msg1',
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      };
+
+      const fileName = `${SESSION_FILE_PREFIX}2024-01-01T10-00-${sessionId.slice(0, 8)}.json`;
+      const filePath = path.join(chatsDir, fileName);
+      await fs.writeFile(filePath, JSON.stringify(session));
+
+      const files = await getAllSessionFiles(chatsDir);
+
+      expect(files.length).toBe(1);
+      expect(files[0].fileName).toBe(fileName);
+      expect(files[0].mtimeMs).toBeTypeOf('number');
+      expect(files[0].mtimeMs).toBeGreaterThan(0);
+    });
+  });
+
   it('should not list sessions marked as subagent', async () => {
     const mainSessionId = randomUUID();
     const subagentSessionId = randomUUID();
